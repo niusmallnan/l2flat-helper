@@ -3,44 +3,54 @@ package utils
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path"
 	"strconv"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/containernetworking/cni/pkg/ns"
 	"github.com/docker/engine-api/client"
 	"github.com/pkg/errors"
 )
 
-func BroadcastArp(iface string, count int) error {
-	arpingPath, err := exec.LookPath("arping")
-	if err != nil {
-		return errors.Wrap(err, "Failed to lookup arping")
-	}
-	out, err := exec.Command(arpingPath, "-i", iface, "-B", "-c", strconv.Itoa(count)).CombinedOutput()
+const (
+	netnsDir = "/var/run/netns/"
+)
+
+func BroadcastArp(dockerID string, iface string, count int) error {
+	logrus.Infof("Broadcast container %s mac address", dockerID)
+	out, err := exec.Command("ip", "netns", "exec", dockerID, "arping", "-i", iface, "-B", "-c", strconv.Itoa(count)).CombinedOutput()
 	logrus.Debugf("arping output: %s", out)
 	return err
 }
 
-func EnterNS(dc *client.Client, dockerID string, f func(ns.NetNS) error) error {
+func LinkNS(dc *client.Client, dockerID string) error {
+	logrus.Infof("Link container %s netns", dockerID)
+	_, err := os.Stat(path.Dir(netnsDir))
+	if os.IsNotExist(err) {
+		os.Mkdir(path.Dir(netnsDir), os.FileMode(0777))
+	}
 	inspect, err := dc.ContainerInspect(context.Background(), dockerID)
 	if err != nil {
 		return errors.Wrapf(err, "Inspecting container: %v", dockerID)
 	}
 
+	err = CleanNS(dockerID)
+	if err != nil {
+		return err
+	}
+
 	containerNSStr := fmt.Sprintf("/proc/%v/ns/net", inspect.State.Pid)
-	netns, err := ns.GetNS(containerNSStr)
-	if err != nil {
-		return errors.Wrapf(err, "Failed to open netns %v", containerNSStr)
-	}
-	defer netns.Close()
+	out, err := exec.Command("ln", "-s", containerNSStr, path.Join(netnsDir, dockerID)).CombinedOutput()
+	logrus.Debugf("link netns output: %s", out)
+	return err
+}
 
-	err = netns.Do(func(n ns.NetNS) error {
-		return f(n)
-	})
-	if err != nil {
-		return errors.Wrapf(err, "In name ns for container %s", dockerID)
+func CleanNS(dockerID string) error {
+	logrus.Debugf("Try to clean %s", path.Join(netnsDir, dockerID))
+	if _, err := os.Lstat(path.Join(netnsDir, dockerID)); err == nil {
+		logrus.Infof("Clean container %s netns", dockerID)
+		return os.Remove(path.Join(netnsDir, dockerID))
 	}
-
 	return nil
 }

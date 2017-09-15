@@ -4,7 +4,6 @@ import (
 	"sync"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/containernetworking/cni/pkg/ns"
 	"github.com/docker/engine-api/client"
 	"github.com/pkg/errors"
 	"github.com/rancher/go-rancher-metadata/metadata"
@@ -58,11 +57,19 @@ func (w *watcher) onChange(version string) error {
 			continue
 		}
 
-		if c.Labels[syncLabelKey] == "true" {
-			return utils.EnterNS(w.dc, c.ExternalId, func(n ns.NetNS) error {
-				logrus.Debugf("Broadcast container %s mac address", c.ExternalId)
-				return utils.BroadcastArp(syncInterface, syncCount)
-			})
+		if c.Labels[syncLabelKey] == "true" && c.ExternalId != "" {
+			err = utils.LinkNS(w.dc, c.ExternalId)
+			if err != nil {
+				return err
+			}
+			err = utils.BroadcastArp(c.ExternalId, syncInterface, syncCount)
+			if err != nil {
+				return err
+			}
+			err = utils.CleanNS(c.ExternalId)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

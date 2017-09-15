@@ -1,4 +1,4 @@
-FROM ubuntu:16.04
+FROM rancher/agent-base:v0.3.0
 COPY l2flat-helper /usr/bin/
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \

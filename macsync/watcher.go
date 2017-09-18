@@ -62,10 +62,7 @@ func (w *watcher) onChange(version string) error {
 			if err != nil {
 				return err
 			}
-			err = utils.BroadcastArp(c.ExternalId, syncInterface, syncCount)
-			if err != nil {
-				return err
-			}
+			utils.BroadcastArp(c.ExternalId, syncInterface, syncCount)
 			err = utils.CleanNS(c.ExternalId)
 			if err != nil {
 				return err

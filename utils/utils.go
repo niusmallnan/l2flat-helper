@@ -17,11 +17,10 @@ const (
 	netnsDir = "/var/run/netns/"
 )
 
-func BroadcastArp(dockerID string, iface string, count int) error {
+func BroadcastArp(dockerID string, iface string, count int) {
 	logrus.Infof("Broadcast container %s mac address", dockerID)
-	out, err := exec.Command("ip", "netns", "exec", dockerID, "arping", "-i", iface, "-B", "-c", strconv.Itoa(count)).CombinedOutput()
+	out, _ := exec.Command("ip", "netns", "exec", dockerID, "arping", "-i", iface, "-B", "-c", strconv.Itoa(count)).CombinedOutput()
 	logrus.Debugf("arping output: %s", out)
-	return err
 }
 
 func LinkNS(dc *client.Client, dockerID string) error {
